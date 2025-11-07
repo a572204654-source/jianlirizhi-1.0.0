@@ -9,8 +9,14 @@ module.exports = {
 
   // 数据库配置
   database: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT) || 3306,
+    // 根据环境自动选择内网或外网地址
+    // 云托管环境(production)使用内网，本地开发(development)使用外网
+    host: process.env.NODE_ENV === 'production' 
+      ? (process.env.DB_HOST_INTERNAL || '10.27.100.151')
+      : (process.env.DB_HOST_EXTERNAL || 'sh-cynosdbmysql-grp-goudlu7k.sql.tencentcdb.com'),
+    port: process.env.NODE_ENV === 'production'
+      ? parseInt(process.env.DB_PORT_INTERNAL || '3306')
+      : parseInt(process.env.DB_PORT_EXTERNAL || '22087'),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'express_miniapp',
