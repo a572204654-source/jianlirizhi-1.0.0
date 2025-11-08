@@ -1,4 +1,4 @@
-const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, AlignmentType, VerticalAlign, BorderStyle, TextDirection, TextRun } = require('docx')
+const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, AlignmentType, VerticalAlign, BorderStyle, TextDirection, TextRun, PageBreak } = require('docx')
 
 /**
  * 生成监理日志Word文档（按照标准格式1:1还原）
@@ -6,14 +6,14 @@ const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, Alig
  * @returns {Promise<Buffer>} Word文档Buffer
  */
 async function generateSupervisionLogWord(logData) {
-    try {
+  try {
     // 创建文档
     const doc = new Document({
       sections: [{
         properties: {
           page: {
             margin: {
-              top: 1440,    // 1英寸 = 1440 twips
+              top: 1440,
               right: 1440,
               bottom: 1440,
               left: 1440
@@ -21,17 +21,277 @@ async function generateSupervisionLogWord(logData) {
           }
         },
         children: [
-      // ============== 标题 ==============
+          // ============== 第一页：封面页 ==============
+          // 附录标识
+          new Paragraph({
+            text: '附录 11-5 表',
+            alignment: AlignmentType.LEFT,
+            spacing: {
+              after: 200
+            },
+            children: [
+              new TextRun({
+                text: '附录 11-5 表',
+                size: 24,
+                font: '宋体'
+              })
+            ]
+          }),
+
+          new Paragraph({
+            text: '',
+            spacing: { after: 400 }
+          }),
+
+          // 标题：监理日志
           new Paragraph({
             text: '监理日志',
             alignment: AlignmentType.CENTER,
             spacing: {
-              after: 400
+              after: 800,
+              before: 400
             },
-            style: 'Heading1'
+            children: [
+              new TextRun({
+                text: '监理日志',
+                size: 56,
+                bold: true,
+                font: '宋体'
+              })
+            ]
           }),
 
-          // ============== 主表格 ==============
+          new Paragraph({
+            text: '',
+            spacing: { after: 400 }
+          }),
+
+          // 封面信息表格
+          new Table({
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE
+            },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: '000000' }
+            },
+            rows: [
+              // 项目名称和项目编号
+              new TableRow({
+                height: { value: 600, rule: 'atLeast' },
+                children: [
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('项目名称')]
+                  }),
+                  new TableCell({
+                    width: { size: 75, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    columnSpan: 3,
+                    children: [createLeftParagraph(logData.project_name || '')]
+                  })
+                ]
+              }),
+
+              // 项目编号（如果有）
+              new TableRow({
+                height: { value: 600, rule: 'atLeast' },
+                children: [
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('项目编号')]
+                  }),
+                  new TableCell({
+                    width: { size: 75, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    columnSpan: 3,
+                    children: [createLeftParagraph(logData.project_code || '')]
+                  })
+                ]
+              }),
+
+              // 单项工程名称
+              new TableRow({
+                height: { value: 600, rule: 'atLeast' },
+                children: [
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('单项工程名称')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createLeftParagraph('')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('单项工程编号')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createLeftParagraph('')]
+                  })
+                ]
+              }),
+
+              // 单位工程名称和编号
+              new TableRow({
+                height: { value: 600, rule: 'atLeast' },
+                children: [
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('单位工程名称')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createLeftParagraph(logData.work_name || '')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('单位工程编号')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createLeftParagraph(logData.work_code || '')]
+                  })
+                ]
+              }),
+
+              // 空白区域（主表格内容）
+              new TableRow({
+                height: { value: 8000, rule: 'atLeast' },
+                children: [
+                  new TableCell({
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.TOP,
+                    columnSpan: 4,
+                    children: [createLeftParagraph('')]
+                  })
+                ]
+              })
+            ]
+          }),
+
+          new Paragraph({
+            text: '',
+            spacing: { after: 400 }
+          }),
+
+          // 底部信息
+          new Paragraph({
+            text: '项目监理机构',
+            alignment: AlignmentType.LEFT,
+            spacing: {
+              after: 400,
+              before: 200
+            },
+            children: [
+              new TextRun({
+                text: '项目监理机构',
+                size: 24,
+                font: '宋体'
+              })
+            ]
+          }),
+
+          // 底部签名表格
+          new Table({
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE
+            },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              left: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: '000000' }
+            },
+            rows: [
+              new TableRow({
+                height: { value: 600, rule: 'atLeast' },
+                children: [
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('总监理工程师')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createLeftParagraph('')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createCenteredParagraph('专业监理工程师')]
+                  }),
+                  new TableCell({
+                    width: { size: 25, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [createLeftParagraph('')]
+                  })
+                ]
+              }),
+              new TableRow({
+                height: { value: 600, rule: 'atLeast' },
+                children: [
+                  new TableCell({
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    columnSpan: 2,
+                    children: [createCenteredParagraph('监理日志起止日期')]
+                  }),
+                  new TableCell({
+                    width: { size: 50, type: WidthType.PERCENTAGE },
+                    verticalAlign: VerticalAlign.CENTER,
+                    columnSpan: 2,
+                    children: [createLeftParagraph('')]
+                  })
+                ]
+              })
+            ]
+          }),
+
+          // 分页符
+          new Paragraph({
+            children: [new PageBreak()]
+          }),
+
+          // ============== 第二页：日志内容页 ==============
+          new Paragraph({
+            text: '监理日志',
+            alignment: AlignmentType.CENTER,
+            spacing: {
+              after: 400,
+              before: 200
+            },
+            children: [
+              new TextRun({
+                text: '监理日志',
+                size: 44,
+                bold: true,
+                font: '宋体'
+              })
+            ]
+          }),
+
+          // 主内容表格
           new Table({
             width: {
               size: 100,
@@ -51,22 +311,22 @@ async function generateSupervisionLogWord(logData) {
                 height: { value: 600, rule: 'atLeast' },
                 children: [
                   new TableCell({
-                    width: { size: 18, type: WidthType.PERCENTAGE },
+                    width: { size: 20, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
-                    children: [createCenteredParagraph('单位工程名称', true)]
+                    children: [createCenteredParagraph('单位工程名称')]
                   }),
                   new TableCell({
-                    width: { size: 32, type: WidthType.PERCENTAGE },
+                    width: { size: 30, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
                     children: [createLeftParagraph(logData.work_name || '')]
                   }),
                   new TableCell({
-                    width: { size: 18, type: WidthType.PERCENTAGE },
+                    width: { size: 20, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
-                    children: [createCenteredParagraph('单位工程编号', true)]
+                    children: [createCenteredParagraph('单位工程编号')]
                   }),
                   new TableCell({
-                    width: { size: 32, type: WidthType.PERCENTAGE },
+                    width: { size: 30, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
                     children: [createLeftParagraph(logData.work_code || '')]
                   })
@@ -78,12 +338,12 @@ async function generateSupervisionLogWord(logData) {
                 height: { value: 600, rule: 'atLeast' },
                 children: [
                   new TableCell({
-                    width: { size: 18, type: WidthType.PERCENTAGE },
+                    width: { size: 20, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
-                    children: [createCenteredParagraph('日期', true)]
+                    children: [createCenteredParagraph('日    期')]
                   }),
                   new TableCell({
-                    width: { size: 82, type: WidthType.PERCENTAGE },
+                    width: { size: 80, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
                     columnSpan: 3,
                     children: [createLeftParagraph(formatDate(logData.log_date))]
@@ -96,12 +356,12 @@ async function generateSupervisionLogWord(logData) {
                 height: { value: 600, rule: 'atLeast' },
                 children: [
                   new TableCell({
-                    width: { size: 18, type: WidthType.PERCENTAGE },
+                    width: { size: 20, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
-                    children: [createCenteredParagraph('气象', true)]
+                    children: [createCenteredParagraph('气    象')]
                   }),
                   new TableCell({
-                    width: { size: 82, type: WidthType.PERCENTAGE },
+                    width: { size: 80, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
                     columnSpan: 3,
                     children: [createLeftParagraph(logData.weather || '')]
@@ -111,16 +371,16 @@ async function generateSupervisionLogWord(logData) {
 
               // 第4行：工程动态
               new TableRow({
-                height: { value: 2000, rule: 'atLeast' },
+                height: { value: 2800, rule: 'atLeast' },
                 children: [
                   new TableCell({
-                    width: { size: 6, type: WidthType.PERCENTAGE },
+                    width: { size: 8, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
                     textDirection: TextDirection.BOTTOM_TO_TOP_LEFT_TO_RIGHT,
-                    children: [createCenteredParagraph('工程动态', true)]
+                    children: [createVerticalParagraph('工程动态')]
                   }),
                   new TableCell({
-                    width: { size: 94, type: WidthType.PERCENTAGE },
+                    width: { size: 92, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.TOP,
                     columnSpan: 3,
                     children: [createContentParagraph(logData.project_dynamics || '')]
@@ -130,16 +390,16 @@ async function generateSupervisionLogWord(logData) {
 
               // 第5行：监理工作情况
               new TableRow({
-                height: { value: 2000, rule: 'atLeast' },
+                height: { value: 2800, rule: 'atLeast' },
                 children: [
                   new TableCell({
-                    width: { size: 6, type: WidthType.PERCENTAGE },
+                    width: { size: 8, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
                     textDirection: TextDirection.BOTTOM_TO_TOP_LEFT_TO_RIGHT,
-                    children: [createCenteredParagraph('监理工作情况', true)]
+                    children: [createVerticalParagraph('监理工作情况')]
                   }),
                   new TableCell({
-                    width: { size: 94, type: WidthType.PERCENTAGE },
+                    width: { size: 92, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.TOP,
                     columnSpan: 3,
                     children: [createContentParagraph(logData.supervision_work || '')]
@@ -149,16 +409,16 @@ async function generateSupervisionLogWord(logData) {
 
               // 第6行：安全监理工作情况
               new TableRow({
-                height: { value: 2000, rule: 'atLeast' },
+                height: { value: 2800, rule: 'atLeast' },
                 children: [
                   new TableCell({
-                    width: { size: 6, type: WidthType.PERCENTAGE },
+                    width: { size: 8, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
                     textDirection: TextDirection.BOTTOM_TO_TOP_LEFT_TO_RIGHT,
-                    children: [createCenteredParagraph('安全监理工作情况', true)]
+                    children: [createVerticalParagraph('安全监理工作情况')]
                   }),
                   new TableCell({
-                    width: { size: 94, type: WidthType.PERCENTAGE },
+                    width: { size: 92, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.TOP,
                     columnSpan: 3,
                     children: [createContentParagraph(logData.safety_work || '')]
@@ -168,12 +428,12 @@ async function generateSupervisionLogWord(logData) {
 
               // 第7行：签名区
               new TableRow({
-                height: { value: 800, rule: 'atLeast' },
+                height: { value: 1000, rule: 'atLeast' },
                 children: [
                   new TableCell({
                     width: { size: 15, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
-                    children: [createCenteredParagraph('记录人', true)]
+                    children: [createCenteredParagraph('记录人')]
                   }),
                   new TableCell({
                     width: { size: 18, type: WidthType.PERCENTAGE },
@@ -188,7 +448,7 @@ async function generateSupervisionLogWord(logData) {
                   new TableCell({
                     width: { size: 15, type: WidthType.PERCENTAGE },
                     verticalAlign: VerticalAlign.CENTER,
-                    children: [createCenteredParagraph('审核人', true)]
+                    children: [createCenteredParagraph('审核人')]
                   }),
                   new TableCell({
                     width: { size: 18, type: WidthType.PERCENTAGE },
@@ -205,28 +465,8 @@ async function generateSupervisionLogWord(logData) {
             ]
           })
         ]
-      }],
-      styles: {
-        paragraphStyles: [
-          {
-            id: 'Heading1',
-            name: 'Heading 1',
-            basedOn: 'Normal',
-            next: 'Normal',
-            run: {
-              size: 44,  // 22pt
-              bold: true,
-              font: '宋体'
-            },
-            paragraph: {
-              spacing: {
-                after: 200
-              }
-            }
-          }
-        ]
-      }
-      })
+      }]
+    })
 
     // 生成Buffer
     const buffer = await Packer.toBuffer(doc)
@@ -250,10 +490,10 @@ function createCenteredParagraph(text, bold = false) {
     children: [
       new TextRun({
         text: text,
-        size: 24,  // 12pt
+        size: 24,
         bold: bold,
         font: '宋体'
-        })
+      })
     ]
   })
 }
@@ -269,12 +509,30 @@ function createLeftParagraph(text) {
     children: [
       new TextRun({
         text: text,
-        size: 24,  // 12pt
+        size: 24,
         font: '宋体'
-          })
+      })
     ]
-        })
-      }
+  })
+}
+
+/**
+ * 创建纵向文字段落
+ * @param {string} text - 文本内容
+ * @returns {Paragraph}
+ */
+function createVerticalParagraph(text) {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [
+      new TextRun({
+        text: text,
+        size: 24,
+        font: '宋体'
+      })
+    ]
+  })
+}
 
 /**
  * 创建内容段落（带缩进）
@@ -289,14 +547,14 @@ function createContentParagraph(text) {
       right: 200
     },
     spacing: {
-      line: 360,  // 1.5倍行距
+      line: 360,
       before: 100,
       after: 100
     },
     children: [
       new TextRun({
         text: text,
-        size: 24,  // 12pt
+        size: 24,
         font: '宋体'
       })
     ]
