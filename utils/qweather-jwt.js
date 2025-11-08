@@ -128,14 +128,19 @@ function getQWeatherToken() {
   // 优先从环境变量读取私钥（云托管环境）
   let privateKeyEnv = process.env.QWEATHER_PRIVATE_KEY
   if (privateKeyEnv) {
-    // 处理可能的 <br> 标签（云托管环境变量可能使用HTML换行）
+    // 处理多种可能的换行符格式
+    // 1. 处理 <br> 标签（云托管环境变量可能使用HTML换行）
     privateKeyEnv = privateKeyEnv.replace(/<br>/g, '\n').replace(/<br\/>/g, '\n')
+    // 2. 处理 \n 字符串字面量（需要转换为真正的换行符）
+    if (privateKeyEnv.includes('\\n')) {
+      privateKeyEnv = privateKeyEnv.replace(/\\n/g, '\n')
+    }
     console.log('使用环境变量中的私钥生成JWT token')
     token = generateQWeatherTokenFromKey(kid, sub, privateKeyEnv)
   } else {
     // 从文件读取私钥（本地开发环境）
     const privateKeyPath = path.join(__dirname, '..', 'ed25519-private.pem')
-    if (!fs.existsSync(privateKeyPath)) {
+  if (!fs.existsSync(privateKeyPath)) {
       throw new Error(`私钥文件不存在: ${privateKeyPath}，且环境变量 QWEATHER_PRIVATE_KEY 未配置`)
     }
     console.log('使用私钥文件生成JWT token')

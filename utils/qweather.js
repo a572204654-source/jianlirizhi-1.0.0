@@ -7,9 +7,11 @@
 
 const axios = require('axios')
 const { getQWeatherToken } = require('./qweather-jwt')
+const config = require('../config')
 
 // API 基础地址
-const API_BASE_URL = 'https://api.qweather.com'
+// JWT认证必须使用专属域名（API Host）
+const API_BASE_URL = config.qweather.apiHost
 
 /**
  * 创建带认证的 axios 实例

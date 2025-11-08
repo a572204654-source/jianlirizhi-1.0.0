@@ -19,6 +19,7 @@ var apiRouter = require('./routes/api');
 // 天气路由
 var weatherRouter = require('./routes/weather');
 var weatherSimpleRouter = require('./routes/weather-simple');
+var weatherV1Router = require('./routes/v1/weather');
 
 // 语音识别路由（旧版本，保留兼容）
 var voiceRecognitionRouter = require('./routes/voice-recognition');
@@ -68,6 +69,7 @@ app.use('/api', apiRouter);
 // 天气API路由
 app.use('/api/weather', weatherRouter);
 app.use('/api/weather', weatherSimpleRouter);
+app.use('/api/v1/weather', weatherV1Router);
 
 // 语音识别API路由（旧版本，保留兼容）
 app.use('/api/voice-recognition', voiceRecognitionRouter);

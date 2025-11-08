@@ -60,10 +60,14 @@ module.exports = {
     domain: process.env.SERVICE_DOMAIN || 'http://localhost'
   },
 
-  // 和风天气配置
+  // 和风天气配置（JWT认证）
   qweather: {
-    apiKey: process.env.QWEATHER_API_KEY || '',
-    apiUrl: 'https://devapi.qweather.com/v7',
+    // JWT认证配置
+    keyId: process.env.QWEATHER_KEY_ID || '',
+    projectId: process.env.QWEATHER_PROJECT_ID || '',
+    privateKey: process.env.QWEATHER_PRIVATE_KEY || '',
+    // API Host（专属域名，JWT认证必需）
+    apiHost: process.env.QWEATHER_API_HOST || 'https://ma4bjadbw4.re.qweatherapi.com',
     timeout: 8000,
     cacheTime: 300 // 缓存5分钟
   },
