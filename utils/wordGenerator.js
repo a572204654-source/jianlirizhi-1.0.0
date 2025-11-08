@@ -363,10 +363,10 @@ async function generateSupervisionLogWord(logData) {
                     children: [createCenteredParagraph(logData.weather || '')]
                   })
                 ]
-              })
-            ]
-          }),
-          
+                  })
+                ]
+              }),
+
           // 表格间零间距段落
           new Paragraph({
             spacing: { before: 0, after: 0, line: 1 },
@@ -470,10 +470,10 @@ async function generateSupervisionLogWord(logData) {
                     children: [createContentParagraph(logData.safety_work || '')]
                   })
                 ]
-              })
-            ]
-          }),
-          
+                  })
+                ]
+              }),
+
           // 表格间零间距段落
           new Paragraph({
             spacing: { before: 0, after: 0, line: 1 },
@@ -530,23 +530,23 @@ async function generateSupervisionLogWord(logData) {
                                   right: { style: BorderStyle.NONE }
                                 },
                                 children: [createLeftParagraph(logData.recorderName || logData.recorder_name || '')]
-                              }),
-                              new TableCell({
+                  }),
+                  new TableCell({
                                 width: { size: 70, type: WidthType.PERCENTAGE },
-                                borders: {
-                                  top: { style: BorderStyle.NONE },
-                                  bottom: { style: BorderStyle.NONE },
-                                  left: { style: BorderStyle.NONE },
-                                  right: { style: BorderStyle.NONE }
-                                },
-                                children: [
-                                  new Paragraph({
-                                    alignment: AlignmentType.RIGHT,
-                                    children: [
-                                      new TextRun({
+                    borders: {
+                      top: { style: BorderStyle.NONE },
+                      bottom: { style: BorderStyle.NONE },
+                      left: { style: BorderStyle.NONE },
+                      right: { style: BorderStyle.NONE }
+                    },
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [
+                          new TextRun({
                                         text: formatDateForSignature(logData.recorderDate || logData.recorder_date),
-                                        size: 24,
-                                        font: '宋体'
+                            size: 24,
+                            font: '宋体'
                                       })
                                     ]
                                   })
@@ -589,23 +589,23 @@ async function generateSupervisionLogWord(logData) {
                                   right: { style: BorderStyle.NONE }
                                 },
                                 children: [createLeftParagraph(logData.reviewerName || logData.reviewer_name || '')]
-                              }),
-                              new TableCell({
+                  }),
+                  new TableCell({
                                 width: { size: 70, type: WidthType.PERCENTAGE },
-                                borders: {
-                                  top: { style: BorderStyle.NONE },
-                                  bottom: { style: BorderStyle.NONE },
-                                  left: { style: BorderStyle.NONE },
-                                  right: { style: BorderStyle.NONE }
-                                },
-                                children: [
-                                  new Paragraph({
-                                    alignment: AlignmentType.RIGHT,
-                                    children: [
-                                      new TextRun({
+                    borders: {
+                      top: { style: BorderStyle.NONE },
+                      bottom: { style: BorderStyle.NONE },
+                      left: { style: BorderStyle.NONE },
+                      right: { style: BorderStyle.NONE }
+                    },
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [
+                          new TextRun({
                                         text: formatDateForSignature(logData.reviewerDate || logData.reviewer_date),
-                                        size: 24,
-                                        font: '宋体'
+                            size: 24,
+                            font: '宋体'
                                       })
                                     ]
                                   })

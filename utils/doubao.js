@@ -12,7 +12,7 @@ async function callDoubaoAPI(messages, options = {}) {
     const {
       maxTokens = config.doubao.maxTokens,
       temperature = config.doubao.temperature,
-      timeout = 5000 // 默认5秒超时，快速失败
+      timeout = 60000 // 默认60秒超时，应对复杂AI对话
     } = options
 
     // 检查API Key是否配置
@@ -56,11 +56,36 @@ async function callDoubaoAPI(messages, options = {}) {
     }
 
   } catch (error) {
-    console.warn('调用豆包API失败，使用模拟响应:', error.message)
+    console.error('调用豆包API失败:', error.message)
     
-    // 返回模拟响应而不是抛出错误
-    const userMessage = messages[messages.length - 1]?.content || ''
-    return `作为工程监理AI助手，我收到了您的问题："${userMessage}"。由于AI服务暂时不可用，这是一个模拟响应。实际生产环境中，我会根据专业的监理知识为您提供详细的建议和指导。`
+    // 根据不同的错误类型返回更友好的提示
+    if (error.message.includes('API Key未配置') || error.message.includes('Endpoint ID未配置')) {
+      return '抱歉，AI对话服务尚未配置完成。请联系管理员配置豆包AI相关参数。'
+    }
+    
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      return '抱歉，AI服务响应超时，请稍后再试。如果问题持续存在，请联系技术支持。'
+    }
+    
+    if (error.response) {
+      // API返回了错误响应
+      const status = error.response.status
+      if (status === 401) {
+        return '抱歉，AI服务认证失败。请联系管理员检查API密钥配置。'
+      } else if (status === 429) {
+        return '抱歉，AI服务请求过于频繁，请稍后再试。'
+      } else if (status >= 500) {
+        return '抱歉，AI服务暂时不可用，请稍后再试。'
+      }
+    }
+    
+    // 网络错误
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      return '抱歉，无法连接到AI服务。请检查网络连接或稍后再试。'
+    }
+    
+    // 通用错误提示
+    return '抱歉，AI服务暂时遇到了一些问题。请稍后再试，或联系技术支持寻求帮助。'
   }
 }
 

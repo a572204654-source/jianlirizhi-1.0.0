@@ -1,181 +1,318 @@
+/**
+ * 天气路由
+ * 
+ * 提供和风天气 API 接口
+ */
+
 const express = require('express')
 const router = express.Router()
-const axios = require('axios')
-const NodeCache = require('node-cache')
-const { authenticate } = require('../middleware/auth')
 const { success, badRequest, serverError } = require('../utils/response')
-
-// 创建缓存实例，5分钟过期
-const weatherCache = new NodeCache({ stdTTL: 300 })
+const {
+  getWeatherNow,
+  getWeatherDaily,
+  getWeatherHourly,
+  getWeatherIndices,
+  getAirQuality,
+  searchCity,
+  getWeatherWarning,
+  getWeatherComprehensive
+} = require('../utils/qweather')
 
 /**
- * 获取当前气象信息
- * GET /api/weather/current
+ * 获取实时天气
+ * GET /api/weather/now
  * 
- * 请求参数:
- * - latitude: 纬度（必填）
- * - longitude: 经度（必填）
+ * 查询参数:
+ * - location: 位置 (经纬度 "116.41,39.92" 或 城市ID "101010100")
  * 
  * 返回数据:
- * - weather: 气象信息字符串（格式：晴，15-25℃）
- * - weatherText: 天气描述
- * - temperature: 当前温度
- * - temperatureMin: 最低温度
- * - temperatureMax: 最高温度
- * - humidity: 湿度
- * - windDirection: 风向
+ * - temp: 温度
+ * - text: 天气状况
+ * - icon: 天气图标代码
+ * - humidity: 相对湿度
+ * - windDir: 风向
  * - windScale: 风力等级
- * - updateTime: 更新时间
- * 
- * 注意：天气查询为公开接口，不需要登录
+ * 等等
  */
-router.get('/current', async (req, res) => {
+router.get('/now', async (req, res) => {
   try {
-    const { latitude, longitude } = req.query
+    const { location } = req.query
 
     // 参数验证
-    if (!latitude || !longitude) {
-      return badRequest(res, '经纬度参数不能为空')
+    if (!location) {
+      return badRequest(res, '缺少位置参数')
     }
 
-    const lat = parseFloat(latitude)
-    const lng = parseFloat(longitude)
+    // 调用和风天气 API
+    const result = await getWeatherNow(location)
 
-    if (isNaN(lat) || isNaN(lng)) {
-      return badRequest(res, '经纬度参数格式不正确')
+    if (result.success) {
+      return success(res, result, '获取实时天气成功')
+    } else {
+      return serverError(res, result.error)
     }
-
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return badRequest(res, '经纬度参数超出有效范围')
-    }
-
-    // 生成缓存key（保留2位小数，相近位置共享缓存）
-    const cacheKey = `weather_${lat.toFixed(2)}_${lng.toFixed(2)}`
-
-    // 检查缓存
-    const cached = weatherCache.get(cacheKey)
-    if (cached) {
-      console.log('气象数据来自缓存:', cacheKey)
-      return success(res, cached, '操作成功（缓存）')
-    }
-
-    // 尝试调用和风天气API
-    const apiKey = process.env.QWEATHER_API_KEY
-    let weatherData = null
-    
-    if (apiKey) {
-      try {
-        // 和风天气API需要的location格式：经度,纬度
-        const location = `${lng},${lat}`
-
-        console.log('尝试调用和风天气API:', { location, lat, lng })
-
-        // 并发请求实时天气和3天预报
-        const [nowRes, forecastRes] = await Promise.all([
-          axios.get('https://devapi.qweather.com/v7/weather/now', {
-            params: {
-              location: location,
-              key: apiKey,
-              lang: 'zh'
-            },
-            timeout: 5000
-          }),
-          axios.get('https://devapi.qweather.com/v7/weather/3d', {
-            params: {
-              location: location,
-              key: apiKey,
-              lang: 'zh'
-            },
-            timeout: 5000
-          })
-        ])
-
-        // 检查API返回状态
-        if (nowRes.data.code === '200' && forecastRes.data.code === '200') {
-          // 解析天气数据
-          const now = nowRes.data.now
-          const forecast = forecastRes.data.daily[0]
-
-          weatherData = {
-            weather: `${now.text}，${forecast.tempMin}-${forecast.tempMax}℃`,
-            weatherText: now.text,
-            temperature: parseFloat(now.temp),
-            temperatureMin: parseFloat(forecast.tempMin),
-            temperatureMax: parseFloat(forecast.tempMax),
-            humidity: parseFloat(now.humidity),
-            windDirection: now.windDir,
-            windScale: now.windScale,
-            updateTime: now.obsTime
-          }
-          
-          console.log('和风天气API调用成功')
-        }
-      } catch (apiError) {
-        console.warn('和风天气API调用失败，将使用模拟数据:', apiError.message)
-      }
-    }
-    
-    // 如果和风天气API失败或未配置，使用模拟数据
-    if (!weatherData) {
-      console.log('使用模拟气象数据')
-      
-      // 根据纬度生成合理的温度范围
-      const baseTemp = 20 - Math.abs(lat - 30) / 3 // 纬度越高温度越低
-      const minTemp = Math.round(baseTemp - 5)
-      const maxTemp = Math.round(baseTemp + 5)
-      const currentTemp = Math.round(baseTemp)
-      
-      // 天气类型列表
-      const weatherTypes = ['晴', '多云', '阴', '小雨', '中雨']
-      const weatherType = weatherTypes[Math.floor(Math.random() * weatherTypes.length)]
-      
-      weatherData = {
-        weather: `${weatherType}，${minTemp}-${maxTemp}℃`,
-        weatherText: weatherType,
-        temperature: currentTemp,
-        temperatureMin: minTemp,
-        temperatureMax: maxTemp,
-        humidity: Math.floor(Math.random() * 40) + 40, // 40-80%
-        windDirection: ['北风', '东北风', '东风', '东南风', '南风', '西南风', '西风', '西北风'][Math.floor(Math.random() * 8)],
-        windScale: `${Math.floor(Math.random() * 4) + 1}`,
-        updateTime: new Date().toISOString(),
-        isMock: true
-      }
-    }
-
-    // 存入缓存
-    weatherCache.set(cacheKey, weatherData)
-    console.log('气象数据已缓存:', cacheKey)
-
-    return success(res, weatherData, '操作成功')
-
   } catch (error) {
-    console.error('气象服务错误:', error.message)
-    return serverError(res, error.message || '气象服务异常')
+    console.error('获取实时天气错误:', error)
+    return serverError(res, '获取实时天气失败')
   }
 })
 
 /**
- * 获取气象缓存统计
- * GET /api/weather/stats
+ * 获取逐天天气预报
+ * GET /api/weather/daily
  * 
- * 仅用于调试，查看缓存使用情况
+ * 查询参数:
+ * - location: 位置
+ * - days: 预报天数 (3/7/10/15/30，默认7天)
+ * 
+ * 返回数据:
+ * - 每天的天气预报数组
  */
-router.get('/stats', authenticate, async (req, res) => {
+router.get('/daily', async (req, res) => {
   try {
-    const stats = weatherCache.getStats()
-    const keys = weatherCache.keys()
+    const { location, days } = req.query
 
-    return success(res, {
-      cacheSize: keys.length,
-      stats: stats,
-      keys: keys
-    }, '操作成功')
+    // 参数验证
+    if (!location) {
+      return badRequest(res, '缺少位置参数')
+    }
+
+    const dayCount = parseInt(days) || 7
+    const validDays = [3, 7, 10, 15, 30]
+
+    if (!validDays.includes(dayCount)) {
+      return badRequest(res, '预报天数必须是 3/7/10/15/30 之一')
+    }
+
+    // 调用和风天气 API
+    const result = await getWeatherDaily(location, dayCount)
+
+    if (result.success) {
+      return success(res, result, '获取天气预报成功')
+    } else {
+      return serverError(res, result.error)
+    }
   } catch (error) {
-    console.error('获取缓存统计错误:', error)
-    return serverError(res, '获取统计信息失败')
+    console.error('获取天气预报错误:', error)
+    return serverError(res, '获取天气预报失败')
+    }
+})
+
+/**
+ * 获取逐小时天气预报
+ * GET /api/weather/hourly
+ * 
+ * 查询参数:
+ * - location: 位置
+ * - hours: 预报小时数 (24/72/168，默认24小时)
+ * 
+ * 返回数据:
+ * - 每小时的天气预报数组
+ */
+router.get('/hourly', async (req, res) => {
+      try {
+    const { location, hours } = req.query
+
+    // 参数验证
+    if (!location) {
+      return badRequest(res, '缺少位置参数')
+    }
+
+    const hourCount = parseInt(hours) || 24
+    const validHours = [24, 72, 168]
+    
+    if (!validHours.includes(hourCount)) {
+      return badRequest(res, '预报小时数必须是 24/72/168 之一')
+    }
+
+    // 调用和风天气 API
+    const result = await getWeatherHourly(location, hourCount)
+
+    if (result.success) {
+      return success(res, result, '获取逐小时天气成功')
+    } else {
+      return serverError(res, result.error)
+    }
+  } catch (error) {
+    console.error('获取逐小时天气错误:', error)
+    return serverError(res, '获取逐小时天气失败')
+  }
+})
+
+/**
+ * 获取天气生活指数
+ * GET /api/weather/indices
+ * 
+ * 查询参数:
+ * - location: 位置
+ * - type: 指数类型 (0=全部, 1=运动, 2=洗车, 3=穿衣, 4=钓鱼, 5=紫外线, 6=旅游, 7=花粉过敏, 8=舒适度, 9=感冒, 10=空气污染扩散, 11=空调开启, 12=太阳镜, 13=化妆, 14=晾晒, 15=交通, 16=防晒)
+ * 
+ * 返回数据:
+ * - 生活指数数组
+ */
+router.get('/indices', async (req, res) => {
+  try {
+    const { location, type } = req.query
+
+    // 参数验证
+    if (!location) {
+      return badRequest(res, '缺少位置参数')
+    }
+
+    const indexType = type || '0'
+
+    // 调用和风天气 API
+    const result = await getWeatherIndices(location, indexType)
+
+    if (result.success) {
+      return success(res, result, '获取生活指数成功')
+    } else {
+      return serverError(res, result.error)
+    }
+  } catch (error) {
+    console.error('获取生活指数错误:', error)
+    return serverError(res, '获取生活指数失败')
+  }
+})
+
+/**
+ * 获取空气质量
+ * GET /api/weather/air
+ * 
+ * 查询参数:
+ * - location: 位置
+ * 
+ * 返回数据:
+ * - aqi: 空气质量指数
+ * - category: 空气质量类别
+ * - pm2p5: PM2.5浓度
+ * - pm10: PM10浓度
+ * 等等
+ */
+router.get('/air', async (req, res) => {
+  try {
+    const { location } = req.query
+
+    // 参数验证
+    if (!location) {
+      return badRequest(res, '缺少位置参数')
+    }
+
+    // 调用和风天气 API
+    const result = await getAirQuality(location)
+
+    if (result.success) {
+      return success(res, result, '获取空气质量成功')
+    } else {
+      return serverError(res, result.error)
+        }
+  } catch (error) {
+    console.error('获取空气质量错误:', error)
+    return serverError(res, '获取空气质量失败')
+      }
+})
+
+/**
+ * 城市搜索
+ * GET /api/weather/city/search
+ * 
+ * 查询参数:
+ * - location: 城市名称或关键词 (如 "北京" 或 "beijing")
+ * 
+ * 返回数据:
+ * - 城市信息数组，包含城市ID、名称、经纬度等
+ */
+router.get('/city/search', async (req, res) => {
+  try {
+    const { location } = req.query
+
+    // 参数验证
+    if (!location) {
+      return badRequest(res, '缺少搜索关键词')
+    }
+
+    // 调用和风天气 API
+    const result = await searchCity(location)
+
+    if (result.success) {
+      return success(res, result, '城市搜索成功')
+    } else {
+      return serverError(res, result.error)
+    }
+  } catch (error) {
+    console.error('城市搜索错误:', error)
+    return serverError(res, '城市搜索失败')
+  }
+})
+
+/**
+ * 获取天气预警
+ * GET /api/weather/warning
+ * 
+ * 查询参数:
+ * - location: 位置（城市ID）
+ * 
+ * 返回数据:
+ * - 天气预警信息数组
+ */
+router.get('/warning', async (req, res) => {
+  try {
+    const { location } = req.query
+
+    // 参数验证
+    if (!location) {
+      return badRequest(res, '缺少位置参数')
+    }
+
+    // 调用和风天气 API
+    const result = await getWeatherWarning(location)
+
+    if (result.success) {
+      return success(res, result, '获取天气预警成功')
+    } else {
+      return serverError(res, result.error)
+    }
+  } catch (error) {
+    console.error('获取天气预警错误:', error)
+    return serverError(res, '获取天气预警失败')
+  }
+})
+
+/**
+ * 获取综合天气信息
+ * GET /api/weather/comprehensive
+ * 
+ * 查询参数:
+ * - location: 位置
+ * 
+ * 返回数据:
+ * - now: 实时天气
+ * - daily: 7天预报
+ * - hourly: 24小时预报
+ * - air: 空气质量
+ * - warning: 天气预警
+ */
+router.get('/comprehensive', async (req, res) => {
+  try {
+    const { location } = req.query
+
+    // 参数验证
+    if (!location) {
+      return badRequest(res, '缺少位置参数')
+    }
+
+    // 调用和风天气 API
+    const result = await getWeatherComprehensive(location)
+
+    if (result.success) {
+      return success(res, result, '获取综合天气信息成功')
+    } else {
+      return serverError(res, result.error)
+    }
+  } catch (error) {
+    console.error('获取综合天气信息错误:', error)
+    return serverError(res, '获取综合天气信息失败')
   }
 })
 
 module.exports = router
-

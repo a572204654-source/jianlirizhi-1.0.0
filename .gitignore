@@ -110,3 +110,6 @@ api-tests/output/
 # 临时文件
 DEPLOY_CHECKLIST.md
 
+# 密钥文件（和风天气 JWT 认证）
+*.pem
+

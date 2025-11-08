@@ -1,5 +1,6 @@
 var createError = require('http-errors');
 var express = require('express');
+var expressWs = require('express-ws');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
@@ -15,6 +16,16 @@ var usersRouter = require('./routes/users');
 // API路由（已去掉v1前缀）
 var apiRouter = require('./routes/api');
 
+// 天气路由
+var weatherRouter = require('./routes/weather');
+var weatherSimpleRouter = require('./routes/weather-simple');
+
+// 语音识别路由（旧版本，保留兼容）
+var voiceRecognitionRouter = require('./routes/voice-recognition');
+
+// 实时语音识别路由（新版本，WebSocket流式）
+var realtimeVoiceRouter = require('./routes/realtime-voice');
+
 // 中间件
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
@@ -22,6 +33,9 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { testConnection } = require('./config/database');
 
 var app = express();
+
+// 启用WebSocket支持
+expressWs(app);
 
 // 测试数据库连接
 testConnection().catch(err => {
@@ -50,6 +64,16 @@ app.use('/users', usersRouter);
 
 // API路由（监理日志小程序）
 app.use('/api', apiRouter);
+
+// 天气API路由
+app.use('/api/weather', weatherRouter);
+app.use('/api/weather', weatherSimpleRouter);
+
+// 语音识别API路由（旧版本，保留兼容）
+app.use('/api/voice-recognition', voiceRecognitionRouter);
+
+// 实时语音识别API路由（新版本，WebSocket流式）
+app.use('/api/realtime-voice', realtimeVoiceRouter);
 
 // 健康检查接口（用于云托管健康检测）
 app.get('/health', (req, res) => {

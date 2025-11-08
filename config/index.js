@@ -66,6 +66,14 @@ module.exports = {
     apiUrl: 'https://devapi.qweather.com/v7',
     timeout: 8000,
     cacheTime: 300 // 缓存5分钟
+  },
+
+  // 腾讯云配置（语音识别）
+  tencentCloud: {
+    secretId: process.env.TENCENT_SECRET_ID || '',
+    secretKey: process.env.TENCENT_SECRET_KEY || '',
+    appId: process.env.TENCENT_APP_ID || '',
+    region: process.env.TENCENT_REGION || 'ap-guangzhou'
   }
 };
 

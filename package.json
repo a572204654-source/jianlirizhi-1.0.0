@@ -10,7 +10,9 @@
     "init-data": "node scripts/init-db-data.js",
     "test-api": "node api-tests/index.js",
     "test-db": "node scripts/test-db-connection.js",
-    "verify": "node scripts/verify-all-features.js"
+    "verify": "node scripts/verify-all-features.js",
+    "setup-voice": "node scripts/setup-voice-recognition.js",
+    "test-voice": "node test/voice-recognition-test.js"
   },
   "dependencies": {
     "@cloudbase/node-sdk": "^3.14.1",
@@ -23,14 +25,17 @@
     "docxtemplater": "^3.67.3",
     "dotenv": "^16.3.1",
     "express": "~4.16.1",
+    "express-ws": "^5.0.2",
     "hbs": "~4.0.4",
     "http-errors": "~1.6.3",
     "jsonwebtoken": "^9.0.2",
     "morgan": "~1.9.1",
+    "multer": "^1.4.5-lts.1",
     "mysql2": "^3.6.0",
     "node-cache": "^5.1.2",
     "officegen": "^0.6.5",
-    "pizzip": "^3.2.0"
+    "pizzip": "^3.2.0",
+    "ws": "^8.14.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

@@ -533,7 +533,9 @@ router.get('/:id/export', authenticate, async (req, res) => {
       new Date(logData.log_date).toISOString().split('T')[0] : 
       new Date().toISOString().split('T')[0]
     
-    const fileName = `监理日志_${dateStr}.docx`
+    // 使用单位工程名称+时间作为文件名
+    const workName = logData.unit_work || logData.work_name || '监理日志'
+    const fileName = `${workName}_${dateStr}.docx`
 
     // 设置响应头
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
