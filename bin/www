@@ -48,6 +48,17 @@ try {
   const expressWs = require('express-ws');
   expressWs(app, server);
   console.log('✓ express-ws WebSocket 服务器已初始化');
+  
+  // 初始化 WebSocket 路由（必须在 express-ws 初始化之后）
+  const realtimeVoiceRouter = require('../routes/realtime-voice');
+  if (realtimeVoiceRouter.initWebSocketRoutes) {
+    const success = realtimeVoiceRouter.initWebSocketRoutes();
+    if (success) {
+      console.log('✓ 实时语音识别 WebSocket 路由已注册');
+    } else {
+      console.warn('⚠️  实时语音识别 WebSocket 路由注册失败');
+    }
+  }
 } catch (error) {
   console.error('✗ express-ws 初始化失败:', error.message);
   console.error('错误堆栈:', error.stack);

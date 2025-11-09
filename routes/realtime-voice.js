@@ -91,217 +91,232 @@ router.post('/recognize', authenticate, upload.single('audio'), async (req, res)
 })
 
 /**
- * WebSocket测试接口
- * WS /api/realtime-voice/test
- * 
- * 用于测试WebSocket连接是否正常
+ * 初始化 WebSocket 路由
+ * 必须在 express-ws 初始化之后调用
  */
-router.ws('/test', (ws, req) => {
-  console.log('WebSocket测试客户端已连接')
-  
-  // 立即发送欢迎消息
-  ws.send(JSON.stringify({
-    type: 'welcome',
-    message: 'WebSocket连接成功！',
-    timestamp: Date.now()
-  }))
-  
-  // 监听消息
-  ws.on('message', (msg) => {
-    try {
-      const message = JSON.parse(msg.toString())
-      console.log('收到测试消息:', message)
-      
-      // 回显消息
-      ws.send(JSON.stringify({
-        type: 'echo',
-        original: message,
-        timestamp: Date.now()
-      }))
-    } catch (error) {
-      ws.send(JSON.stringify({
-        type: 'error',
-        message: '消息格式错误'
-      }))
-    }
-  })
-  
-  // 连接关闭
-  ws.on('close', () => {
-    console.log('WebSocket测试客户端已断开')
-  })
-  
-  // 连接错误
-  ws.on('error', (error) => {
-    console.error('WebSocket测试错误:', error)
-  })
-})
+function initWebSocketRoutes() {
+  // 检查 router.ws 是否存在
+  if (typeof router.ws !== 'function') {
+    console.error('❌ router.ws 不可用，express-ws 可能未正确初始化')
+    return false
+  }
 
-/**
- * 实时语音识别（WebSocket流式）
- * WS /api/realtime-voice/stream
- * 
- * 用于长时间实时语音输入，支持边说边识别
- * 客户端需要持续发送音频数据帧
- */
-router.ws('/stream', (ws, req) => {
-  console.log('WebSocket客户端已连接:', req.url)
-
-  let recognition = null
-  let userId = null
-  let voiceLogId = null
-  let recognizedText = ''
-  let audioSize = 0
-  let startTime = Date.now()
-
-  // 接收客户端消息
-  ws.on('message', async (msg) => {
-    try {
-      const message = JSON.parse(msg.toString())
-      console.log('收到客户端消息:', message.type)
-
-      // 初始化识别
-      if (message.type === 'start') {
-        userId = message.userId
-        const token = message.token
-
-        // TODO: 验证token和userId
-        // 简化处理，实际应该验证token
-        if (!userId || !token) {
-          ws.send(JSON.stringify({
-            type: 'error',
-            message: '缺少认证信息'
-          }))
-          ws.close()
-          return
-        }
-
-        // 获取识别选项
-        const options = {
-          engineType: message.engineType || '16k_zh',
-          voiceFormat: message.voiceFormat || 1,
-          needvad: message.needvad !== undefined ? message.needvad : 1,
-          filterDirty: message.filterDirty || 0,
-          filterModal: message.filterModal || 0,
-          convertNumMode: message.convertNumMode || 1,
-          wordInfo: message.wordInfo || 2,
-          vadSilenceTime: message.vadSilenceTime || 200
-        }
-
-        console.log('开始实时识别，用户ID:', userId, '选项:', options)
-
-        // 创建实时识别连接
-        const voiceService = getVoiceRecognitionService()
+  /**
+   * WebSocket测试接口
+   * WS /api/realtime-voice/test
+   * 
+   * 用于测试WebSocket连接是否正常
+   */
+  router.ws('/test', (ws, req) => {
+    console.log('WebSocket测试客户端已连接')
+    
+    // 立即发送欢迎消息
+    ws.send(JSON.stringify({
+      type: 'welcome',
+      message: 'WebSocket连接成功！',
+      timestamp: Date.now()
+    }))
+    
+    // 监听消息
+    ws.on('message', (msg) => {
+      try {
+        const message = JSON.parse(msg.toString())
+        console.log('收到测试消息:', message)
         
-        recognition = voiceService.createRealtimeRecognition(
-          options,
-          // 识别结果回调
-          (result) => {
-            console.log('识别结果:', result)
-            recognizedText = result.text
+        // 回显消息
+        ws.send(JSON.stringify({
+          type: 'echo',
+          original: message,
+          timestamp: Date.now()
+        }))
+      } catch (error) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: '消息格式错误'
+        }))
+      }
+    })
+    
+    // 连接关闭
+    ws.on('close', () => {
+      console.log('WebSocket测试客户端已断开')
+    })
+    
+    // 连接错误
+    ws.on('error', (error) => {
+      console.error('WebSocket测试错误:', error)
+    })
+  })
 
-            // 发送识别结果到客户端
-            ws.send(JSON.stringify({
-              type: 'result',
-              voiceId: result.voiceId,
-              text: result.text,
-              isFinal: result.isFinal,
-              wordList: result.wordList
-            }))
+  /**
+   * 实时语音识别（WebSocket流式）
+   * WS /api/realtime-voice/stream
+   * 
+   * 用于长时间实时语音输入，支持边说边识别
+   * 客户端需要持续发送音频数据帧
+   */
+  router.ws('/stream', (ws, req) => {
+    console.log('WebSocket客户端已连接:', req.url)
 
-            // 如果是最终结果，保存到数据库
-            if (result.isFinal && userId) {
-              saveRecognitionLog(userId, recognizedText, audioSize, options)
-                .then(id => {
-                  voiceLogId = id
-                  console.log('识别记录已保存，ID:', id)
-                })
-                .catch(err => {
-                  console.error('保存识别记录错误:', err)
-                })
-            }
-          },
-          // 错误回调
-          (error) => {
-            console.error('识别错误:', error)
+    let recognition = null
+    let userId = null
+    let voiceLogId = null
+    let recognizedText = ''
+    let audioSize = 0
+    let startTime = Date.now()
+
+    // 接收客户端消息
+    ws.on('message', async (msg) => {
+      try {
+        const message = JSON.parse(msg.toString())
+        console.log('收到客户端消息:', message.type)
+
+        // 初始化识别
+        if (message.type === 'start') {
+          userId = message.userId
+          const token = message.token
+
+          // TODO: 验证token和userId
+          // 简化处理，实际应该验证token
+          if (!userId || !token) {
             ws.send(JSON.stringify({
               type: 'error',
-              message: error.message || '识别失败'
+              message: '缺少认证信息'
             }))
+            ws.close()
+            return
           }
-        )
 
-        // 发送就绪消息
-        ws.send(JSON.stringify({
-          type: 'ready',
-          message: '识别服务已就绪'
-        }))
-      }
-      // 发送音频数据
-      else if (message.type === 'audio') {
-        if (!recognition) {
+          // 获取识别选项
+          const options = {
+            engineType: message.engineType || '16k_zh',
+            voiceFormat: message.voiceFormat || 1,
+            needvad: message.needvad !== undefined ? message.needvad : 1,
+            filterDirty: message.filterDirty || 0,
+            filterModal: message.filterModal || 0,
+            convertNumMode: message.convertNumMode || 1,
+            wordInfo: message.wordInfo || 2,
+            vadSilenceTime: message.vadSilenceTime || 200
+          }
+
+          console.log('开始实时识别，用户ID:', userId, '选项:', options)
+
+          // 创建实时识别连接
+          const voiceService = getVoiceRecognitionService()
+          
+          recognition = voiceService.createRealtimeRecognition(
+            options,
+            // 识别结果回调
+            (result) => {
+              console.log('识别结果:', result)
+              recognizedText = result.text
+
+              // 发送识别结果到客户端
+              ws.send(JSON.stringify({
+                type: 'result',
+                voiceId: result.voiceId,
+                text: result.text,
+                isFinal: result.isFinal,
+                wordList: result.wordList
+              }))
+
+              // 如果是最终结果，保存到数据库
+              if (result.isFinal && userId) {
+                saveRecognitionLog(userId, recognizedText, audioSize, options)
+                  .then(id => {
+                    voiceLogId = id
+                    console.log('识别记录已保存，ID:', id)
+                  })
+                  .catch(err => {
+                    console.error('保存识别记录错误:', err)
+                  })
+              }
+            },
+            // 错误回调
+            (error) => {
+              console.error('识别错误:', error)
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: error.message || '识别失败'
+              }))
+            }
+          )
+
+          // 发送就绪消息
           ws.send(JSON.stringify({
-            type: 'error',
-            message: '识别服务未初始化'
+            type: 'ready',
+            message: '识别服务已就绪'
           }))
-          return
         }
+        // 发送音频数据
+        else if (message.type === 'audio') {
+          if (!recognition) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: '识别服务未初始化'
+            }))
+            return
+          }
 
-        // 解码Base64音频数据
-        const audioData = Buffer.from(message.data, 'base64')
-        audioSize += audioData.length
+          // 解码Base64音频数据
+          const audioData = Buffer.from(message.data, 'base64')
+          audioSize += audioData.length
 
-        // 发送到腾讯云
-        recognition.send(audioData, message.isEnd || false)
+          // 发送到腾讯云
+          recognition.send(audioData, message.isEnd || false)
 
-        // 如果是最后一帧，发送完成消息
-        if (message.isEnd) {
-          console.log('音频发送完成，总大小:', audioSize)
+          // 如果是最后一帧，发送完成消息
+          if (message.isEnd) {
+            console.log('音频发送完成，总大小:', audioSize)
+          }
         }
-      }
-      // 停止识别
-      else if (message.type === 'stop') {
-        if (recognition) {
-          recognition.close()
-          recognition = null
-        }
+        // 停止识别
+        else if (message.type === 'stop') {
+          if (recognition) {
+            recognition.close()
+            recognition = null
+          }
 
+          ws.send(JSON.stringify({
+            type: 'stopped',
+            message: '识别已停止',
+            logId: voiceLogId,
+            text: recognizedText,
+            audioSize: audioSize,
+            duration: Date.now() - startTime
+          }))
+        }
+      } catch (error) {
+        console.error('处理WebSocket消息错误:', error)
         ws.send(JSON.stringify({
-          type: 'stopped',
-          message: '识别已停止',
-          logId: voiceLogId,
-          text: recognizedText,
-          audioSize: audioSize,
-          duration: Date.now() - startTime
+          type: 'error',
+          message: error.message || '处理消息失败'
         }))
       }
-    } catch (error) {
-      console.error('处理WebSocket消息错误:', error)
-      ws.send(JSON.stringify({
-        type: 'error',
-        message: error.message || '处理消息失败'
-      }))
-    }
+    })
+
+    // 连接关闭
+    ws.on('close', () => {
+      console.log('WebSocket客户端已断开')
+      if (recognition) {
+        recognition.close()
+        recognition = null
+      }
+    })
+
+    // 连接错误
+    ws.on('error', (error) => {
+      console.error('WebSocket错误:', error)
+      if (recognition) {
+        recognition.close()
+        recognition = null
+      }
+    })
   })
 
-  // 连接关闭
-  ws.on('close', () => {
-    console.log('WebSocket客户端已断开')
-    if (recognition) {
-      recognition.close()
-      recognition = null
-    }
-  })
-
-  // 连接错误
-  ws.on('error', (error) => {
-    console.error('WebSocket错误:', error)
-    if (recognition) {
-      recognition.close()
-      recognition = null
-    }
-  })
-})
+  console.log('✓ WebSocket 路由已注册: /api/realtime-voice/test, /api/realtime-voice/stream')
+  return true
+}
 
 /**
  * 保存识别记录到数据库
@@ -444,4 +459,5 @@ router.get('/stats', authenticate, async (req, res) => {
 })
 
 module.exports = router
+module.exports.initWebSocketRoutes = initWebSocketRoutes
 
