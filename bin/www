@@ -4,6 +4,19 @@
  * Module dependencies.
  */
 
+// 添加全局错误处理，捕获未处理的异常
+process.on('uncaughtException', (error) => {
+  console.error('未捕获的异常:', error);
+  console.error('错误堆栈:', error.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+  console.error('Promise:', promise);
+  process.exit(1);
+});
+
 var app = require('../app');
 var debug = require('debug')('express:server');
 var http = require('http');
@@ -16,6 +29,12 @@ var http = require('http');
 var port = normalizePort(process.env.PORT || '80');
 app.set('port', port);
 
+console.log('==================================');
+console.log('应用启动中...');
+console.log(`环境: ${process.env.NODE_ENV || 'development'}`);
+console.log(`端口: ${port}`);
+console.log('==================================');
+
 /**
  * Create HTTP server.
  */
@@ -25,24 +44,31 @@ var server = http.createServer(app);
 /**
  * 初始化 Socket.IO
  */
-const { Server } = require('socket.io');
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  },
-  path: '/socket.io/',
-  transports: ['websocket', 'polling']
-});
+try {
+  const { Server } = require('socket.io');
+  const io = new Server(server, {
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST']
+    },
+    path: '/socket.io/',
+    transports: ['websocket', 'polling']
+  });
 
-// 将 io 实例挂载到 app 上，供路由使用
-app.set('io', io);
+  // 将 io 实例挂载到 app 上，供路由使用
+  app.set('io', io);
 
-console.log('Socket.IO 服务器已初始化');
+  console.log('✓ Socket.IO 服务器已初始化');
 
-// 初始化 Socket.IO 路由处理
-if (app.initSocketIO) {
-  app.initSocketIO();
+  // 初始化 Socket.IO 路由处理
+  if (app.initSocketIO) {
+    app.initSocketIO();
+  }
+} catch (error) {
+  console.error('✗ Socket.IO 初始化失败:', error.message);
+  console.error('错误堆栈:', error.stack);
+  // 如果 Socket.IO 初始化失败，应用仍然可以启动（只是没有 Socket.IO 功能）
+  console.warn('⚠️  应用将在没有 Socket.IO 支持的情况下启动');
 }
 
 /**
@@ -110,5 +136,10 @@ function onListening() {
   var bind = typeof addr === 'string'
     ? 'pipe ' + addr
     : 'port ' + addr.port;
+  console.log('==================================');
+  console.log('✓ 服务器启动成功');
+  console.log(`✓ 监听地址: ${bind}`);
+  console.log(`✓ 健康检查: http://localhost:${port}/health`);
+  console.log('==================================');
   debug('Listening on ' + bind);
 }
