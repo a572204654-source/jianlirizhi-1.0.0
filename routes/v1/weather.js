@@ -1,23 +1,20 @@
 const express = require('express')
 const router = express.Router()
-const axios = require('axios')
-const NodeCache = require('node-cache')
 const { authenticate } = require('../../middleware/auth')
 const { success, badRequest, serverError } = require('../../utils/response')
-
-// 创建缓存实例，5分钟过期
-const weatherCache = new NodeCache({ stdTTL: 300 })
+const { getWeatherHistorical, getWeatherByDate, searchCity } = require('../../utils/qweather')
 
 /**
- * 获取当前气象信息
+ * 获取指定日期的气象信息
  * GET /api/v1/weather/current
  * 
  * 请求参数:
- * - latitude: 纬度
- * - longitude: 经度
+ * - latitude: 纬度（必填）
+ * - longitude: 经度（必填）
+ * - date: 日期，格式 YYYY-MM-DD（可选，默认当天）
  * 
  * 返回数据:
- * - weather: 气象信息字符串（格式：晴，15-25℃）
+ * - weather: 气象信息字符串（格式：天气 雨 · 气温: 25-31 · 风向: 东 · 风力: 4）
  * - weatherText: 天气描述
  * - temperature: 当前温度
  * - temperatureMin: 最低温度
@@ -26,10 +23,16 @@ const weatherCache = new NodeCache({ stdTTL: 300 })
  * - windDirection: 风向
  * - windScale: 风力等级
  * - updateTime: 更新时间
+ * 
+ * 说明:
+ * - 支持当前日期前后10天的查询
+ * - 前10天（历史）使用时光机API
+ * - 后10天（未来）使用每日预报API
+ * - 每次请求都重新获取，不使用缓存
  */
 router.get('/current', authenticate, async (req, res) => {
   try {
-    const { latitude, longitude } = req.query
+    const { latitude, longitude, date } = req.query
 
     // 参数验证
     if (!latitude || !longitude) {
@@ -47,112 +50,140 @@ router.get('/current', authenticate, async (req, res) => {
       return badRequest(res, '经纬度参数超出有效范围')
     }
 
-    // 生成缓存key（保留2位小数，相近位置共享缓存）
-    const cacheKey = `weather_${lat.toFixed(2)}_${lng.toFixed(2)}`
-
-    // 检查缓存
-    const cached = weatherCache.get(cacheKey)
-    if (cached) {
-      console.log('气象数据来自缓存:', cacheKey)
-      return success(res, cached, '操作成功（缓存）')
+    // 日期处理
+    let targetDate = date
+    if (!targetDate) {
+      // 如果没有提供日期，使用今天
+      const today = new Date()
+      targetDate = today.toISOString().split('T')[0] // YYYY-MM-DD
     }
 
-    // 尝试调用和风天气API
-    const apiKey = process.env.QWEATHER_API_KEY
+    // 验证日期格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+    if (!dateRegex.test(targetDate)) {
+      return badRequest(res, '日期格式不正确，应为 YYYY-MM-DD')
+    }
+
+    // 计算日期差（相对于今天）
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const target = new Date(targetDate)
+    target.setHours(0, 0, 0, 0)
+    const diffDays = Math.floor((target - today) / (1000 * 60 * 60 * 24))
+
+    // 检查日期范围（前后10天）
+    if (diffDays < -10 || diffDays > 10) {
+      return badRequest(res, '日期超出范围，仅支持当前日期前后10天')
+    }
+
+    // 和风天气API需要的location格式：经度,纬度
+    const location = `${lng},${lat}`
     let weatherData = null
-    
-    if (apiKey) {
-      try {
-        // 和风天气API需要的location格式：经度,纬度
-        const location = `${lng},${lat}`
 
-        console.log('尝试调用和风天气API:', { location, lat, lng })
+    try {
+      if (diffDays < 0) {
+        // 历史日期（前10天），使用时光机API
+        // 时光机API只支持LocationID，需要先通过经纬度获取LocationID
+        console.log(`获取历史天气: ${targetDate} (${diffDays}天前)`)
 
-        // 并发请求实时天气和3天预报
-        const [nowRes, forecastRes] = await Promise.all([
-          axios.get('https://devapi.qweather.com/v7/weather/now', {
-            params: {
-              location: location,
-              key: apiKey,
-              lang: 'zh'
-            },
-            timeout: 5000
-          }),
-          axios.get('https://devapi.qweather.com/v7/weather/3d', {
-            params: {
-              location: location,
-              key: apiKey,
-              lang: 'zh'
-            },
-            timeout: 5000
-          })
+        // 先通过经纬度获取LocationID
+        const cityResult = await searchCity(location)
+        if (!cityResult.success || !cityResult.data || cityResult.data.length === 0) {
+          return serverError(res, '无法获取位置信息，请检查经纬度是否正确')
+        }
+
+        const locationId = cityResult.data[0].id
+        console.log(`获取到LocationID: ${locationId}`)
+
+        // 调用时光机API（日期格式：yyyyMMdd）
+        const dateStr = targetDate.replace(/-/g, '')
+        const historicalResult = await getWeatherHistorical(locationId, dateStr)
+
+        if (!historicalResult.success) {
+          return serverError(res, historicalResult.error || '获取历史天气失败')
+        }
+
+        const daily = historicalResult.data.daily
+        const hourly = historicalResult.data.hourly || []
+
+        // 使用当天的第一个小时数据作为当前温度和天气描述
+        const firstHour = hourly.length > 0 ? hourly[0] : null
+        const currentTemp = firstHour ? parseFloat(firstHour.temp) : parseFloat(daily.tempMin)
+        // 时光机API的daily没有text字段，需要从hourly中获取
+        const weatherText = firstHour ? firstHour.text : '未知'
+
+        weatherData = {
+          weather: `天气 ${weatherText} · 气温: ${daily.tempMin}-${daily.tempMax} · 风向: ${firstHour ? firstHour.windDir : '未知'} · 风力: ${firstHour ? firstHour.windScale : '未知'}`,
+          weatherText: weatherText,
+          temperature: currentTemp,
+          temperatureMin: parseFloat(daily.tempMin),
+          temperatureMax: parseFloat(daily.tempMax),
+          humidity: firstHour ? parseFloat(firstHour.humidity) : parseFloat(daily.humidity || '0'),
+          windDirection: firstHour ? firstHour.windDir : '未知',
+          windScale: firstHour ? firstHour.windScale : '未知',
+          updateTime: daily.date || targetDate
+        }
+
+      } else if (diffDays > 0) {
+        // 未来日期（后10天），使用每日预报API
+        console.log(`获取未来天气: ${targetDate} (${diffDays}天后)`)
+
+        const forecastResult = await getWeatherByDate(location, targetDate, 10)
+
+        if (!forecastResult.success) {
+          return serverError(res, forecastResult.error || '获取天气预报失败')
+        }
+
+        const forecast = forecastResult.data
+
+        weatherData = {
+          weather: `天气 ${forecast.textDay || forecast.text || '未知'} · 气温: ${forecast.tempMin}-${forecast.tempMax} · 风向: ${forecast.windDirDay || '未知'} · 风力: ${forecast.windScaleDay || '未知'}`,
+          weatherText: forecast.textDay || forecast.text || '未知',
+          temperature: parseFloat(forecast.tempMax), // 未来日期使用最高温度
+          temperatureMin: parseFloat(forecast.tempMin),
+          temperatureMax: parseFloat(forecast.tempMax),
+          humidity: parseFloat(forecast.humidity || '0'),
+          windDirection: forecast.windDirDay || '未知',
+          windScale: forecast.windScaleDay || '未知',
+          updateTime: forecast.fxDate || targetDate
+        }
+
+      } else {
+        // 今天，使用实时天气和今日预报
+        console.log('获取今天天气')
+
+        const { getWeatherNow, getWeatherDaily } = require('../../utils/qweather')
+        const [nowResult, dailyResult] = await Promise.all([
+          getWeatherNow(location),
+          getWeatherDaily(location, 1)
         ])
 
-        // 检查API返回状态
-        if (nowRes.data.code === '200' && forecastRes.data.code === '200') {
-          // 解析天气数据
-          const now = nowRes.data.now
-          const forecast = forecastRes.data.daily[0]
-
-          weatherData = {
-            // 完整气象字符串：天气 雨 · 气温: 25-31 · 风向: 东 · 风力: 4
-            weather: `天气 ${now.text} · 气温: ${forecast.tempMin}-${forecast.tempMax} · 风向: ${now.windDir} · 风力: ${now.windScale}`,
-            // 单独字段（方便前端使用）
-            weatherText: now.text,
-            temperature: parseFloat(now.temp),
-            temperatureMin: parseFloat(forecast.tempMin),
-            temperatureMax: parseFloat(forecast.tempMax),
-            humidity: parseFloat(now.humidity),
-            windDirection: now.windDir,
-            windScale: now.windScale,
-            updateTime: now.obsTime
-          }
-          
-          console.log('和风天气API调用成功')
+        if (!nowResult.success || !dailyResult.success) {
+          return serverError(res, '获取今天天气失败')
         }
-      } catch (apiError) {
-        console.warn('和风天气API调用失败，将使用模拟数据:', apiError.message)
-      }
-    }
-    
-    // 如果和风天气API失败或未配置，使用模拟数据
-    if (!weatherData) {
-      console.log('使用模拟气象数据')
-      
-      // 根据纬度生成合理的温度范围
-      const baseTemp = 20 - Math.abs(lat - 30) / 3 // 纬度越高温度越低
-      const minTemp = Math.round(baseTemp - 5)
-      const maxTemp = Math.round(baseTemp + 5)
-      const currentTemp = Math.round(baseTemp)
-      
-      // 天气类型列表
-      const weatherTypes = ['晴', '多云', '阴', '小雨', '中雨']
-      const weatherType = weatherTypes[Math.floor(Math.random() * weatherTypes.length)]
-      
-      const windDir = ['北风', '东北风', '东风', '东南风', '南风', '西南风', '西风', '西北风'][Math.floor(Math.random() * 8)]
-      const windScale = Math.floor(Math.random() * 4) + 1
-      
-      weatherData = {
-        // 完整气象字符串：天气 雨 · 气温: 25-31 · 风向: 东 · 风力: 4
-        weather: `天气 ${weatherType} · 气温: ${minTemp}-${maxTemp} · 风向: ${windDir} · 风力: ${windScale}`,
-        // 单独字段（方便前端使用）
-        weatherText: weatherType,
-        temperature: currentTemp,
-        temperatureMin: minTemp,
-        temperatureMax: maxTemp,
-        humidity: Math.floor(Math.random() * 40) + 40, // 40-80%
-        windDirection: windDir,
-        windScale: `${windScale}`,
-        updateTime: new Date().toISOString(),
-        isMock: true
-      }
-    }
 
-    // 存入缓存
-    weatherCache.set(cacheKey, weatherData)
-    console.log('气象数据已缓存:', cacheKey)
+        const now = nowResult.data
+        const today = dailyResult.data[0]
 
-    return success(res, weatherData, '操作成功')
+        weatherData = {
+          weather: `天气 ${now.text} · 气温: ${today.tempMin}-${today.tempMax} · 风向: ${now.windDir} · 风力: ${now.windScale}`,
+          weatherText: now.text,
+          temperature: parseFloat(now.temp),
+          temperatureMin: parseFloat(today.tempMin),
+          temperatureMax: parseFloat(today.tempMax),
+          humidity: parseFloat(now.humidity),
+          windDirection: now.windDir,
+          windScale: now.windScale,
+          updateTime: now.obsTime
+        }
+      }
+
+      return success(res, weatherData, '操作成功')
+
+    } catch (error) {
+      console.error('获取天气数据错误:', error)
+      return serverError(res, error.message || '获取天气数据失败')
+    }
 
   } catch (error) {
     console.error('气象服务错误:', error.message)
@@ -160,27 +191,6 @@ router.get('/current', authenticate, async (req, res) => {
   }
 })
 
-/**
- * 获取气象缓存统计
- * GET /api/v1/weather/stats
- * 
- * 仅用于调试，查看缓存使用情况
- */
-router.get('/stats', authenticate, async (req, res) => {
-  try {
-    const stats = weatherCache.getStats()
-    const keys = weatherCache.keys()
-
-    return success(res, {
-      cacheSize: keys.length,
-      stats: stats,
-      keys: keys
-    }, '操作成功')
-  } catch (error) {
-    console.error('获取缓存统计错误:', error)
-    return serverError(res, '获取统计信息失败')
-  }
-})
 
 module.exports = router
 

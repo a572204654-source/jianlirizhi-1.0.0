@@ -280,6 +280,95 @@ async function getWeatherWarning(location) {
 }
 
 /**
+ * 获取天气时光机（历史天气）
+ * 
+ * @param {string} location - 位置参数（仅支持LocationID，如 "101010100"）
+ * @param {string} date - 日期，格式 yyyyMMdd（如 "20200725"），最多可选择最近10天（不包含今天）
+ * @returns {Object} 历史天气数据
+ */
+async function getWeatherHistorical(location, date) {
+  try {
+    const client = createAuthenticatedClient()
+    const response = await client.get('/v7/historical/weather', {
+      params: { 
+        location,
+        date
+      }
+    })
+    
+    if (response.data.code === '200') {
+      return {
+        success: true,
+        data: {
+          daily: response.data.weatherDaily,
+          hourly: response.data.weatherHourly || []
+        },
+        updateTime: response.data.updateTime,
+        fxLink: response.data.fxLink
+      }
+    } else {
+      return {
+        success: false,
+        error: `和风天气API错误: ${response.data.code}`
+      }
+    }
+  } catch (error) {
+    console.error('获取历史天气失败:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+}
+
+/**
+ * 获取指定日期的天气预报
+ * 
+ * @param {string} location - 位置参数
+ * @param {string} targetDate - 目标日期，格式 yyyy-MM-dd（如 "2024-10-25"）
+ * @param {number} days - 预报天数，默认10天（最大30天）
+ * @returns {Object} 指定日期的天气数据
+ */
+async function getWeatherByDate(location, targetDate, days = 10) {
+  try {
+    // 获取多天预报
+    const result = await getWeatherDaily(location, days)
+    
+    if (!result.success) {
+      return result
+    }
+    
+    // 查找目标日期
+    const targetDateStr = targetDate.replace(/-/g, '') // 转换为 yyyyMMdd
+    const targetDay = result.data.find(day => {
+      // daily数据中的fxDate格式为 yyyy-MM-dd
+      const dayDateStr = day.fxDate.replace(/-/g, '')
+      return dayDateStr === targetDateStr
+    })
+    
+    if (!targetDay) {
+      return {
+        success: false,
+        error: `未找到日期 ${targetDate} 的天气预报数据`
+      }
+    }
+    
+    return {
+      success: true,
+      data: targetDay,
+      updateTime: result.updateTime,
+      fxLink: result.fxLink
+    }
+  } catch (error) {
+    console.error('获取指定日期天气失败:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+}
+
+/**
  * 获取综合天气信息（实时+预报+空气质量）
  * 
  * @param {string} location - 位置参数
@@ -323,6 +412,8 @@ module.exports = {
   getAirQuality,
   searchCity,
   getWeatherWarning,
-  getWeatherComprehensive
+  getWeatherComprehensive,
+  getWeatherHistorical,
+  getWeatherByDate
 }
 
