@@ -233,7 +233,8 @@ async function getAirQuality(location) {
 async function searchCity(location) {
   try {
     const client = createAuthenticatedClient()
-    const response = await client.get('/v2/city/lookup', {
+    // 使用正确的 API 路径: /geo/v2/city/lookup
+    const response = await client.get('/geo/v2/city/lookup', {
       params: { location }
     })
     
@@ -245,14 +246,45 @@ async function searchCity(location) {
     } else {
       return {
         success: false,
-        error: `和风天气API错误: ${response.data.code}`
+        error: `和风天气API错误: ${response.data.code} - ${response.data.refer?.license || '未知错误'}`
       }
     }
   } catch (error) {
-    console.error('城市搜索失败:', error)
+    // 改进错误处理，提供更详细的错误信息
+    let errorMessage = error.message
+    if (error.response) {
+      // HTTP 错误响应
+      const status = error.response.status
+      const statusText = error.response.statusText
+      const data = error.response.data
+      errorMessage = `HTTP ${status} ${statusText}`
+      if (data && data.code) {
+        errorMessage += ` - API错误码: ${data.code}`
+      }
+      if (data && data.refer && data.refer.license) {
+        errorMessage += ` - ${data.refer.license}`
+      }
+      console.error('城市搜索失败:', {
+        status,
+        statusText,
+        url: error.config?.url,
+        params: error.config?.params,
+        response: data
+      })
+    } else if (error.request) {
+      // 请求已发出但没有收到响应
+      errorMessage = '网络请求超时或无法连接到服务器'
+      console.error('城市搜索失败: 网络错误', {
+        url: error.config?.url,
+        params: error.config?.params
+      })
+    } else {
+      console.error('城市搜索失败:', error)
+    }
+    
     return {
       success: false,
-      error: error.message
+      error: errorMessage
     }
   }
 }
